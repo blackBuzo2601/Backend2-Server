@@ -21,24 +21,24 @@ def handle_client(conn, addr):
                 menu = "Elige una opción:\n1. Login\n2. Register\n"
                 conn.sendall(menu.encode("utf-8"))
 
-                option = conn.recv(1024)
-                if not option:
+                option_bytes = conn.recv(1024)
+                if not option_bytes:
                     break
-                option = option.decode("utf-8").strip()
+                option = option_bytes.decode("utf-8").strip()
 
                 if option == "1":
-                    # Login
+                    # --- LOGIN ---
                     conn.sendall("Ingresa usuario: ".encode("utf-8"))
-                    user_input = conn.recv(1024)
-                    if not user_input:
+                    user_input_bytes = conn.recv(1024)
+                    if not user_input_bytes:
                         break
-                    user = user_input.decode("utf-8").strip()
+                    user = user_input_bytes.decode("utf-8").strip()
 
                     conn.sendall("Ingresa contraseña: ".encode("utf-8"))
-                    password_input = conn.recv(1024)
-                    if not password_input:
+                    password_input_bytes = conn.recv(1024)
+                    if not password_input_bytes:
                         break
-                    password = password_input.decode("utf-8").strip()
+                    password = password_input_bytes.decode("utf-8").strip()
 
                     cursor.execute("SELECT * FROM users WHERE user=? AND password=?", (user, password))
                     result = cursor.fetchone()
@@ -46,23 +46,83 @@ def handle_client(conn, addr):
                     if result:
                         conn.sendall(f"Login exitoso. Bienvenido {user}!\n".encode("utf-8"))
                         print(f"[LOGIN] Usuario {user} conectado desde {addr}")
-                        logged_in = True  # Cambia el estado
+                        logged_in = True
                     else:
                         conn.sendall("\nUsuario o contraseña incorrectos.\n".encode("utf-8"))
-                        # Sigue el loop para intentar de nuevo
 
                 elif option == "2":
-                    conn.sendall("Intentando registrarse...\n".encode("utf-8"))
+                    # --- REGISTER ---
+                    while True:
+                        conn.sendall("Ingresa tu nombre de usuario: ".encode("utf-8"))
+                        username_bytes = conn.recv(1024)
+                        if not username_bytes:
+                            break
+                        new_username = username_bytes.decode("utf-8").strip()
+
+                        if new_username == "":
+                            conn.sendall("Usuario vacío, regresando al menú principal.\n".encode("utf-8"))
+                            break
+
+                        # Verificar que no exista
+                        cursor.execute("SELECT 1 FROM users WHERE user = ?", (new_username,))
+                        exists = cursor.fetchone()
+                        if exists:
+                            conn.sendall("Ese nombre de usuario ya existe, por favor introduce otro.\n".encode("utf-8"))
+                            continue
+
+                        while True:
+                            conn.sendall("Ingresa la contraseña para tu usuario: ".encode("utf-8"))
+                            p1_bytes = conn.recv(1024)
+                            if not p1_bytes:
+                                break
+                            p1 = p1_bytes.decode("utf-8").strip()
+
+                            if p1 == "":
+                                conn.sendall("Contraseña vacía, regresando al menú principal.\n".encode("utf-8"))
+                                break
+
+                            conn.sendall("Repite la contraseña para guardar cambios: ".encode("utf-8"))
+                            p2_bytes = conn.recv(1024)
+                            if not p2_bytes:
+                                break
+                            p2 = p2_bytes.decode("utf-8").strip()
+
+                            if p1 == p2:
+                                try:
+                                    cursor.execute("INSERT INTO users (user, password) VALUES (?, ?)", (new_username, p1))
+                                    conn_db.commit()
+                                    conn.sendall(f"Registro exitoso. Usuario '{new_username}' creado.\n".encode("utf-8"))
+                                    print(f"[REGISTER] Usuario {new_username} creado desde {addr}")
+                                    break
+                                except sqlite3.IntegrityError:
+                                    conn.sendall("Error al registrar. Ese nombre podría existir. Intenta otro.\n".encode("utf-8"))
+                                    break
+                                except Exception as e:
+                                    conn.sendall(f"Error interno al registrar: {e}\n".encode("utf-8"))
+                                    break
+                            else:
+                                conn.sendall("Las contraseñas no coinciden, vuelva a intentarlo.\n".encode("utf-8"))
+                                conn.sendall("Teclea ENTER para regresar al menu principal (o escribe cualquier otra cosa para reintentar): ".encode("utf-8"))
+                                decide_bytes = conn.recv(1024)
+                                if not decide_bytes:
+                                    break
+                                decide = decide_bytes.decode("utf-8").strip()
+                                if decide == "":
+                                    break
+                                else:
+                                    continue
+                        break  # volver al menú principal
+
                 else:
                     conn.sendall("Opción inválida.\n".encode("utf-8"))
 
             else:
                 # Ya logueado: escuchar mensajes del cliente
-                msg = conn.recv(1024)
-                if not msg:
+                msg_bytes = conn.recv(1024)
+                if not msg_bytes:
                     break
-                mensaje = msg.decode("utf-8").strip()
-                print(f"{addr}{mensaje}")  # Mostrar mensaje con IP del cliente
+                mensaje = msg_bytes.decode("utf-8").strip()
+                print(f"{addr} {mensaje}")  # Mostrar mensaje con IP del cliente
 
     except Exception as e:
         print(f"Error con {addr}: {e}")
