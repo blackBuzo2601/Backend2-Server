@@ -45,7 +45,7 @@ def handle_client(conn, addr):
                 conn.sendall("Opción inválida.\n".encode("utf-8"))
 
             # Preguntar si quiere continuar
-            conn.sendall("¿Deseas continuar en el menú? (s/n): ".encode("utf-8"))
+            conn.sendall("¿Quiere volverlo a intentar? (s/n): ".encode("utf-8"))
             cont = conn.recv(1024)
             if not cont or cont.decode("utf-8").strip().lower() != "s":
                 conn.sendall("Cerrando conexión. ¡Hasta luego!\n".encode("utf-8"))

@@ -1,6 +1,6 @@
 import socket
 
-HOST = "172.23.189.64"  # Cambia a la IP del servidor
+HOST = "172.23.189.64"
 PORT = 65432
 
 def recv_until_prompt(s):
@@ -23,13 +23,22 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             # Recibir mensaje del servidor
             msg = recv_until_prompt(s)
             if msg is None:
-                print("Conexión cerrada por el servidor.")
+                print("\nConexión cerrada por el servidor.")
                 break
             print(msg, end='')
 
-            # Enviar respuesta si el servidor espera input
-            user_input = input()
-            s.sendall((user_input + "\n").encode("utf-8"))
+            # Recibir input solo si el socket sigue abierto
+            try:
+                user_input = input()
+            except EOFError:
+                break
+
+            # Enviar respuesta
+            try:
+                s.sendall((user_input + "\n").encode("utf-8"))
+            except BrokenPipeError:
+                print("\nNo se pudo enviar datos: el servidor cerró la conexión.")
+                break
 
     except KeyboardInterrupt:
         print("\nCerrando cliente.")
