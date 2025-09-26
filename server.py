@@ -48,7 +48,7 @@ def handle_client(conn, addr):
                         print(f"[LOGIN] Usuario {user} conectado desde {addr}")
                         logged_in = True  # Cambia el estado
                     else:
-                        conn.sendall("Usuario o contraseña incorrectos.\n".encode("utf-8"))
+                        conn.sendall("\nUsuario o contraseña incorrectos.\n".encode("utf-8"))
                         # Sigue el loop para intentar de nuevo
 
                 elif option == "2":
@@ -62,7 +62,7 @@ def handle_client(conn, addr):
                 if not msg:
                     break
                 mensaje = msg.decode("utf-8").strip()
-                print(f"{mensaje} {addr}")  # Mostrar mensaje con IP del cliente
+                print(f"{addr}{mensaje}")  # Mostrar mensaje con IP del cliente
 
     except Exception as e:
         print(f"Error con {addr}: {e}")
