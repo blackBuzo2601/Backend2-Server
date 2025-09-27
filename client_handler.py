@@ -1,3 +1,5 @@
+# client_handler.py
+from protocol import recv_line, send_str
 from auth import login_user, register_user
 
 def handle_client(conn, addr):
@@ -8,85 +10,122 @@ def handle_client(conn, addr):
 
         while True:
             if not logged_in:
-                menu = "Elige una opción:\n1. Login\n2. Register\n"
-                conn.sendall(menu.encode("utf-8"))
+                send_str(conn, "Elige una opción:\n1. Login\n2. Register\n")
 
-                option_bytes = conn.recv(1024)
-                if not option_bytes:
+                option = recv_line(conn)
+                if option is None:
                     break
-                option = option_bytes.decode("utf-8").strip()
+                option = option.strip()
 
                 if option == "1":
-                    # --- LOGIN ---
-                    conn.sendall("Ingresa usuario: ".encode("utf-8"))
-                    user_input = conn.recv(1024)
-                    if not user_input:
+                    # LOGIN
+                    send_str(conn, "Ingresa usuario: ")
+                    user_input = recv_line(conn)
+                    if user_input is None:
                         break
-                    user = user_input.decode("utf-8").strip()
-
-                    conn.sendall("Ingresa contraseña: ".encode("utf-8"))
-                    password_input = conn.recv(1024)
-                    if not password_input:
+                    user = user_input.strip()
+                    send_str(conn, "Ingresa contraseña: ")
+                    pw_input = recv_line(conn)
+                    if pw_input is None:
                         break
-                    password = password_input.decode("utf-8").strip()
+                    password = pw_input.strip()
 
-                    if login_user(user, password):
-                        conn.sendall(f"Login exitoso. Bienvenido {user}!\n".encode("utf-8"))
+                    ok = login_user(user, password)
+                    if ok:
+                        send_str(conn, f"Login exitoso. Bienvenido {user}!\n")
+                        print(f"[LOGIN] Usuario {user} conectado desde {addr}")
                         logged_in = True
                     else:
-                        conn.sendall("Usuario o contraseña incorrectos.\n".encode("utf-8"))
+                        send_str(conn, "\nUsuario o contraseña incorrectos.\n")
 
                 elif option == "2":
-                    # --- REGISTER ---
+                    # REGISTER
                     while True:
-                        conn.sendall("Ingresa tu nombre de usuario: ".encode("utf-8"))
-                        username_bytes = conn.recv(1024)
-                        if not username_bytes:
+                        send_str(conn, "Ingresa tu nombre de usuario: ")
+                        username_line = recv_line(conn)
+                        if username_line is None:
+                            # desconexión del cliente
                             break
-                        new_username = username_bytes.decode("utf-8").strip()
+                        new_username = username_line.strip()
+                        # si vacío -> volver al menú
                         if new_username == "":
+                            send_str(conn, "Usuario vacío, regresando al menú principal.\n")
                             break
 
+                        # si ya existe
+                        if login_user(new_username, ""):  # hack: check existence via user_exists not available here, but better use register_user's logic
+                            # avoid using login_user for existence; but to keep modules lean, we'll call register_user and handle
+                            pass
+
+                        # check existence via register attempt will detect duplicates, but better call register helper
+                        from database import user_exists
                         if user_exists(new_username):
-                            conn.sendall("Ese nombre de usuario ya existe, por favor introduce otro.\n".encode("utf-8"))
+                            send_str(conn, "Ese nombre de usuario ya existe, por favor introduce otro.\n")
                             continue
 
-                        conn.sendall("Ingresa la contraseña para tu usuario: ".encode("utf-8"))
-                        password1_bytes = conn.recv(1024)
-                        if not password1_bytes:
-                            break
-                        password1 = password1_bytes.decode("utf-8").strip()
-                        if password1 == "":
-                            break
-
-                        conn.sendall("Repite la contraseña para guardar cambios: ".encode("utf-8"))
-                        password2_bytes = conn.recv(1024)
-                        if not password2_bytes:
-                            break
-                        password2 = password2_bytes.decode("utf-8").strip()
-
-                        if password1 != password2:
-                            conn.sendall("Las contraseñas no coinciden. Teclea ENTER para regresar al menu principal.\n".encode("utf-8"))
-                            decide_bytes = conn.recv(1024)
-                            if not decide_bytes or decide_bytes.decode("utf-8").strip() == "":
+                        # pedir contraseña
+                        while True:
+                            send_str(conn, "Ingresa la contraseña para tu usuario: ")
+                            p1 = recv_line(conn)
+                            if p1 is None:
                                 break
-                        else:
-                            success, msg = register_user(new_username, password1)
-                            conn.sendall(f"{msg}\n".encode("utf-8"))
-                            break
+                            p1 = p1.strip()
+                            if p1 == "":
+                                send_str(conn, "Contraseña vacía, regresando al menú principal.\n")
+                                break
+
+                            send_str(conn, "Repite la contraseña para guardar cambios: ")
+                            p2 = recv_line(conn)
+                            if p2 is None:
+                                break
+                            p2 = p2.strip()
+
+                            if p1 == p2:
+                                ok, msg = register_user(new_username, p1)
+                                send_str(conn, msg + "\n")
+                                if ok:
+                                    print(f"[REGISTER] Usuario {new_username} creado desde {addr}")
+                                    # registro completado: volver al menú principal
+                                    break
+                                else:
+                                    # si no se pudo registrar, mostrar msg y volver a pedir username
+                                    # (msg ya enviado)
+                                    break
+                            else:
+                                send_str(conn, "Las contraseñas no coinciden, vuelva a intentarlo.\n")
+                                send_str(conn, "Teclea ENTER para regresar al menu principal (o escribe cualquier otra cosa para reintentar): ")
+                                decide = recv_line(conn)
+                                if decide is None:
+                                    break
+                                if decide.strip() == "":
+                                    # volver al menú principal
+                                    break
+                                else:
+                                    # reintentar pedir contraseñas
+                                    continue
+                        # salir del bucle de registro y volver al menu
+                        break
 
                 else:
-                    conn.sendall("Opción inválida.\n".encode("utf-8"))
-
+                    send_str(conn, "Opción inválida.\n")
             else:
-                msg_bytes = conn.recv(1024)
-                if not msg_bytes:
+                # Cliente ya autenticado: recibir mensajes y mostrarlos en servidor
+                msg = recv_line(conn)
+                if msg is None:
                     break
-                mensaje = msg_bytes.decode("utf-8").strip()
-                print(f"{addr} {mensaje}")
+                mensaje = msg.strip()
+                print(f"[{user} - {addr}] dice: {mensaje}")
 
     except Exception as e:
+        # enviar mensaje de error al cliente si es posible antes de cerrar
+        try:
+            send_str(conn, f"Error interno: {e}\n")
+        except Exception:
+            pass
         print(f"Error con {addr}: {e}")
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
         print(f"Cliente {addr} desconectado")

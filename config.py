@@ -1,3 +1,3 @@
-HOST = "172.23.189.64"
+HOST = "192.168.0.119"
 PORT = 65432
 DB_PATH = "users.sqlite"
